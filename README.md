@@ -1,4 +1,7 @@
 # Arnav-os
 
-building an OS because i am bored
-i m using make, NASM as an assembler, and qemu as virtualization software
+Building an OS because I am bored.
+
+- Using `make` as the build system  
+- Using `NASM` as the assembler  
+- Using `QEMU` as the virtualization software
