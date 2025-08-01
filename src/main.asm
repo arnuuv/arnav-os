@@ -1,6 +1,9 @@
 org 0x7C00
 bits 16
 
+%define ENDL 0x0D,0x0A
+
+
 start:
   jmp main
 
@@ -17,9 +20,14 @@ puts:
 
 .loop:
   lodsb       ;loads character into al
-  or al,al    ;
+  or al,al    ;verify if next character is null
   jz .done
+  
+  mov ah, 0x0e    ;call bios interrupt
+  mov bh,0
+  int 0x10
   jmp .loop
+
 
 
 .done:
@@ -39,6 +47,10 @@ main:
   mov ss,ax
   mov sp, 0x7C00   ;stack grows downwards from where loaded in memory
 
+  ;print message
+  mov si,msg_hello
+  call puts
+
 
 
   hlt
@@ -46,7 +58,7 @@ main:
 .halt:
   jmp .halt
 
-
+msg_hello: db 'Hello world',ENDL,0
 
 times 510-($-$$) db 0
 dw 0AA55h
