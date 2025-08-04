@@ -1,8 +1,7 @@
-org 0x7C00
+org 0x1000
 bits 16
 
 %define ENDL 0x0D,0x0A
-
 
 start:
   jmp main
@@ -12,9 +11,8 @@ start:
 ; Params :
 ;     -ds:si points to a string
 ;
-;
 puts:
-  ;save reisters we will modify
+  ;save registers we will modify
   push si
   push ax
 
@@ -28,18 +26,14 @@ puts:
   int 0x10
   jmp .loop
 
-
-
 .done:
   pop ax
   pop si
   ret 
 
-
-
 main: 
   ;setup data segments
-  mov ax,0    ;cant write directly to ds/es
+  mov ax,0    ;can't write directly to ds/es
   mov ds,ax
   mov es,ax
 
@@ -51,17 +45,17 @@ main:
   mov si,msg_hello
   call puts
 
-
+  ;print another message to show kernel is running
+  mov si,msg_kernel
+  call puts
 
   hlt
 
 .halt:
   jmp .halt
 
-msg_hello: db 'Hello world',ENDL,0
-
-times 510-($-$$) db 0
-dw 0AA55h
+msg_hello: db 'Hello from kernel!',ENDL,0
+msg_kernel: db 'Kernel loaded successfully!',ENDL,0
 
 
 

@@ -4,9 +4,8 @@ bits 16
 %define ENDL 0x0D,0x0A
 
 
-#
-# FAT12 header
-#
+
+; FAT12 header
 jmp short start
 nop
 
@@ -23,6 +22,18 @@ bdb_sectors_per_track:        dw 18
 bdb_heads:                    dw 2
 bdb_hidden_sectors:           dd 0
 bdb_large_sector_count:       dd 0
+
+; extended boot record
+ebr_drive_number:             db 0                   ;0x00 = floppy, 0x80 hdb, useless 
+                              db 0                   ;reserved
+ebr_signature:                db 29h 
+ebr_volume_id:                db 12h,34h,56h,78h     ;serial number
+ebr_volume_label:             db 'KRATOS       ' ;11 bytes, padded with space
+ebr_system_id:                db 'FAT12        '     ;8 bytes
+
+
+
+
 
 
 start:
