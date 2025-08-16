@@ -210,7 +210,4 @@ msg_pm: db 'Protected mode active! Memory management enabled!',0
 disk_error_msg: db 'Disk read error!',ENDL,0
 
 times 510-($-$$) db 0
-dw 0AA55h
-
-
-
+dw 0AA55h 
