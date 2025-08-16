@@ -1,61 +1,98 @@
-org 0x1000
-bits 16
+org 0x100000
+bits 32
 
-%define ENDL 0x0D,0x0A
-
+; Kernel entry point
 start:
-  jmp main
-
-; 
-; Prints a string to the screen.
-; Params :
-;     -ds:si points to a string
-;
-puts:
-  ;save registers we will modify
-  push si
-  push ax
-
-.loop:
-  lodsb       ;loads character into al
-  or al,al    ;verify if next character is null
-  jz .done
+  ; Set up segment registers
+  mov ax, 0x10      ; Data segment selector
+  mov ds, ax
+  mov es, ax
+  mov fs, ax
+  mov gs, ax
+  mov ss, ax
   
-  mov ah, 0x0e    ;call bios interrupt
-  mov bh,0
-  int 0x10
-  jmp .loop
-
-.done:
-  pop ax
-  pop si
-  ret 
-
-main: 
-  ;setup data segments
-  mov ax,0    ;can't write directly to ds/es
-  mov ds,ax
-  mov es,ax
-
-  ;setup stack
-  mov ss,ax
-  mov sp, 0x7C00   ;stack grows downwards from where loaded in memory
-
-  ;print message
-  mov si,msg_hello
+  ; Set up stack
+  mov esp, 0x90000  ; Stack at 576KB
+  
+  ; Clear screen
+  call clear_screen
+  
+  ; Print welcome message
+  mov esi, msg_welcome
   call puts
-
-  ;print another message to show kernel is running
-  mov si,msg_kernel
+  
+  ; Print memory info
+  mov esi, msg_memory
   call puts
-
+  
+  ; Print kernel location
+  mov esi, msg_kernel_loc
+  call puts
+  
+  ; Print status
+  mov esi, msg_status
+  call puts
+  
+  ; Halt the system
   hlt
 
-.halt:
-  jmp .halt
+; Clear the screen
+clear_screen:
+  push eax
+  push ecx
+  push edi
+  
+  mov edi, 0xB8000  ; Video memory address
+  mov ecx, 2000     ; 80x25 characters
+  mov ax, 0x0720    ; White space on black background
+  rep stosw
+  
+  pop edi
+  pop ecx
+  pop eax
+  ret
 
-msg_hello: db 'Hello from kernel!',ENDL,0
-msg_kernel: db 'Kernel loaded successfully!',ENDL,0
+; Print a string to the screen
+; Params:
+;   - esi: pointer to null-terminated string
+puts:
+  push eax
+  push edi
+  
+  mov edi, 0xB8000  ; Start at top of screen
+  
+  ; Find current cursor position (simple approach - just start from top)
+  ; In a real OS, you'd maintain cursor position
+  
+.loop:
+  lodsb              ; Load character
+  or al, al          ; Check if null
+  jz .done
+  
+  mov ah, 0x07      ; White on black attribute
+  mov [edi], ax      ; Write character and attribute
+  
+  add edi, 2         ; Next character position
+  
+  ; Check if we need to scroll (simple line wrapping)
+  cmp edi, 0xB8000 + 160  ; End of first line
+  jb .loop
+  
+  ; Move to next line
+  add edi, 160 - 2        ; Next line, adjust for character width
+  
+  jmp .loop
+  
+.done:
+  pop edi
+  pop eax
+  ret
+
+; Data
+msg_welcome: db 'Welcome to ArnavOS!', 0
+msg_memory: db 'Memory management initialized', 0
+msg_kernel_loc: db 'Kernel running at 1MB+', 0
+msg_status: db 'System ready for GUI development!', 0
 
 
 
