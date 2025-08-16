@@ -41,92 +41,53 @@ start:
 ;     -ds:si points to a string
 ;
 puts:
-  ;save registers we will modify
   push si
   push ax
-
 .loop:
-  lodsb       ;loads character into al
-  or al,al    ;verify if next character is null
+  lodsb
+  or al,al
   jz .done
-  
-  mov ah, 0x0e    ;call bios interrupt
+  mov ah, 0x0e
   mov bh,0
   int 0x10
   jmp .loop
-
 .done:
   pop ax
   pop si
   ret 
 
-;
-; Memory Management - GDT and Protected Mode
-;
-
 ; Global Descriptor Table
 gdt_start:
-  ; Null descriptor (required)
-  dq 0
-  
-  ; Code segment descriptor
-  dw 0xFFFF      ; Limit (bits 0-15)
-  dw 0x0000      ; Base (bits 0-15)
-  db 0x00        ; Base (bits 16-23)
-  db 10011010b   ; Access byte: Present, Ring 0, Code, Non-conforming, Readable
-  db 11001111b   ; Flags: Granularity (4KB), 32-bit, Limit (bits 16-19)
-  db 0x00        ; Base (bits 24-31)
-  
-  ; Data segment descriptor
-  dw 0xFFFF      ; Limit (bits 0-15)
-  dw 0x0000      ; Base (bits 0-15)
-  db 0x00        ; Base (bits 16-23)
-  db 10010010b   ; Access byte: Present, Ring 0, Data, Grows up, Writable
-  db 11001111b   ; Flags: Granularity (4KB), 32-bit, Limit (bits 16-19)
-  db 0x00        ; Base (bits 24-31)
-
+  dq 0                    ; Null descriptor
+  dw 0xFFFF,0x0000       ; Code segment
+  db 0x00,10011010b,11001111b,0x00
+  dw 0xFFFF,0x0000       ; Data segment
+  db 0x00,10010010b,11001111b,0x00
 gdt_end:
 
-; GDT descriptor
 gdt_descriptor:
-  dw gdt_end - gdt_start - 1  ; GDT size - 1
-  dd gdt_start                 ; GDT address
+  dw gdt_end - gdt_start - 1
+  dd gdt_start
 
-; GDT selectors
 %define CODE_SEG 0x08
 %define DATA_SEG 0x10
 
-;
 ; Disk operations
-;
-
-; Reads sectors from disk
-; Params:
-;   - ax: LBA address
-;   - cl: number of sectors to read
-;   - dl: drive number
-;   - es:bx: memory address to store sectors
 disk_read:
   push ax
   push bx
   push cx
   push dx
-  push di
-
-  push cx                     ; Save sector count
-  call lba_to_chs            ; Convert LBA to CHS
-  pop ax                      ; AL = number of sectors to read
-  
-  mov ch, BYTE [absoluteTrack]    ; cylinder
-  mov cl, BYTE [absoluteSector]   ; sector
-  mov dh, BYTE [absoluteHead]     ; head
-  mov dl, BYTE [bootDrive]        ; drive
-  
+  push cx
+  call lba_to_chs
+  pop ax
+  mov ch, BYTE [absoluteTrack]
+  mov cl, BYTE [absoluteSector]
+  mov dh, BYTE [absoluteHead]
+  mov dl, BYTE [bootDrive]
   mov ah, 02h
   int 13h
   jc disk_error
-  
-  pop di
   pop dx
   pop cx
   pop bx
@@ -138,153 +99,109 @@ disk_error:
   call puts
   jmp $
 
-; Convert LBA to CHS
-; Params:
-;   - ax: LBA address
-; Returns:
-;   - absoluteTrack, absoluteSector, absoluteHead
 lba_to_chs:
   push ax
   push dx
-  
-  xor dx, dx                          ; dx = 0
-  div WORD [bdb_sectors_per_track]    ; ax = LBA / SectorsPerTrack
-                                      ; dx = LBA % SectorsPerTrack
-  inc dx                              ; dx = (LBA % SectorsPerTrack) + 1 = sector
+  xor dx, dx
+  div WORD [bdb_sectors_per_track]
+  inc dx
   mov BYTE [absoluteSector], dl
-  xor dx, dx                          ; dx = 0
-  div WORD [bdb_heads]                ; ax = (LBA / SectorsPerTrack) / NumHeads = cylinder
-                                      ; dx = (LBA / SectorsPerTrack) % NumHeads = head
+  xor dx, dx
+  div WORD [bdb_heads]
   mov BYTE [absoluteTrack], al
   mov BYTE [absoluteHead], dl
-  
   pop dx
   pop ax
   ret
 
-; Load kernel from disk
 load_kernel:
-  ; Load kernel from sector 1 (after bootloader)
-  mov ax, 1                    ; Start from sector 1
-  mov cl, 1                    ; Read 1 sector
+  mov ax, 1
+  mov cl, 1
   mov dl, [bootDrive]
   mov bx, KERNEL_OFFSET
   call disk_read
   ret
 
-; Switch to protected mode
 enter_protected_mode:
-  ; Disable interrupts
   cli
-  
-  ; Load GDT
   lgdt [gdt_descriptor]
-  
-  ; Enable A20 line (required for protected mode)
   in al, 0x92
   or al, 2
   out 0x92, al
-  
-  ; Set protection enable bit in CR0
   mov eax, cr0
   or eax, 1
   mov cr0, eax
-  
-  ; Far jump to flush pipeline and switch to 32-bit code
   jmp CODE_SEG:protected_mode_start
 
-; 32-bit protected mode code
 bits 32
 protected_mode_start:
-  ; Set up segment registers
   mov ax, DATA_SEG
   mov ds, ax
   mov es, ax
   mov fs, ax
   mov gs, ax
   mov ss, ax
+  mov esp, 0x90000
   
-  ; Set up stack
-  mov esp, 0x90000  ; Stack at 576KB
-  
-  ; Clear screen (simple approach)
-  mov edi, 0xB8000  ; Video memory address
-  mov ecx, 2000     ; 80x25 characters
-  mov ax, 0x0720    ; White space on black background
+  ; Clear screen
+  mov edi, 0xB8000
+  mov ecx, 2000
+  mov ax, 0x0720
   rep stosw
   
-  ; Print protected mode message
+  ; Print message
   mov esi, msg_protected
   call puts_32
   
-  ; Load kernel to high memory (1MB+)
+  ; Load kernel to high memory
   call load_kernel_32
-  
-  ; Jump to kernel
   jmp KERNEL_32BIT_OFFSET
 
-; 32-bit puts function
 puts_32:
   push edi
   push eax
-  
-  mov edi, 0xB8000  ; Video memory
-  
+  mov edi, 0xB8000
 .loop:
-  lodsb              ; Load character
-  or al, al          ; Check if null
+  lodsb
+  or al, al
   jz .done
-  
-  mov ah, 0x07      ; White on black
-  mov [edi], ax      ; Write character and attribute
-  add edi, 2         ; Next character position
+  mov ah, 0x07
+  mov [edi], ax
+  add edi, 2
   jmp .loop
-  
 .done:
   pop eax
   pop edi
   ret
 
-; Load kernel to high memory
 load_kernel_32:
-  ; For now, just copy from low memory to high memory
   mov esi, KERNEL_OFFSET
   mov edi, KERNEL_32BIT_OFFSET
-  mov ecx, 512      ; Copy 512 bytes
+  mov ecx, 512
   rep movsb
   ret
 
-; Return to 16-bit mode for compatibility
 bits 16
 
 main: 
-  ;setup data segments
-  mov ax,0    ;can't write directly to ds/es
+  mov ax,0
   mov ds,ax
   mov es,ax
-
-  ;setup stack
   mov ss,ax
-  mov sp, 0x7C00   ;stack grows downwards from where loaded in memory
-
-  ;save boot drive
+  mov sp, 0x7C00
   mov [bootDrive], dl
-
-  ;print boot message
+  
   mov si,msg_boot
   call puts
-
-  ;load kernel
+  
   mov si,msg_loading
   call puts
-
+  
   call load_kernel
-
-  ;print success message
+  
   mov si,msg_loaded
   call puts
-
-  ;enter protected mode
+  
   mov si,msg_entering_pm
   call puts
   
@@ -306,7 +223,6 @@ msg_entering_pm: db 'Entering protected mode...',ENDL,0
 msg_protected: db 'Protected mode active! Memory management enabled!',0
 disk_error_msg: db 'Disk read error!',ENDL,0
 
-; Boot signature - must be at the end
 times 510-($-$$) db 0
 dw 0AA55h
 
